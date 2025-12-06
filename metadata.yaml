@@ -3,4 +3,4 @@ display_name: Code-Renderer
 desc: 将代码信息或者代码文件渲染为图片
 version: 1.3.2
 author: Xbodwf
-repo:
+repo: https://github.com/Xbodwf/astrbot_plugin_code_renderer

@@ -67,7 +67,6 @@ def hello():
 | theme | 代码主题 | monokai |
 | font_family | 字体名称 | Jetbrains Mono |
 | font_size | 字体大小 | 14 |
-
 | padding | 内边距 | 20 |
 | blacklist | 群聊黑名单 | [] |
 

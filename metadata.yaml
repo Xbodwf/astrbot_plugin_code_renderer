@@ -1,0 +1,6 @@
+name: code_renderer
+display_name: Code-Renderer
+desc: 将代码信息或者代码文件渲染为图片
+version: 1.3.2
+author: Xbodwf
+repo:

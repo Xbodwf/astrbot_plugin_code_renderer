@@ -2,5 +2,5 @@ name: astrbot_plugin_code_renderer
 display_name: Code-Renderer
 desc: 将代码信息或者代码文件渲染为带有语法高亮的图片
 version: 1.3.2
-author: Xbodwf
+author: Xbodw
 repo: https://github.com/Xbodwf/astrbot_plugin_code_renderer

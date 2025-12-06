@@ -1,8 +1,0 @@
-{
-  "_comment": "自定义语言配置示例。将此文件重命名为 custom_languages.json 即可生效。",
-  "mylang": {
-    "extensions": [".mylang", ".ml"],
-    "aliases": ["my", "myl"],
-    "display_name": "My Language"
-  }
-}

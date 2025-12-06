@@ -366,7 +366,7 @@ class CodeRenderPlugin(Star):
         """定期清理超过1小时的临时文件"""
         while True:
             try:
-                await asyncio.sleep(3600)  # 每小时检查一次
+                await asyncio.sleep(900)  # 每15min检查一次
                 await self._cleanup_temp_files()
             except Exception as e:
                 logger.error(f"定期清理临时文件时出错: {e}")

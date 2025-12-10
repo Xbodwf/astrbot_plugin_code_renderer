@@ -27,190 +27,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-# 字体回退列表（按优先级排序）
-FONT_FALLBACK_LIST = [
-    "JetBrains Mono",
-    "Consolas",
-    "Fira Code",
-    "Source Code Pro",
-    "Monaco",
-    "DejaVu Sans Mono",
-    "Liberation Mono",
-    "Courier New",
-    "monospace",
-]
-
-# 主题配置
-THEMES = {
-    "monokai": {
-        "style": "monokai",
-        "background": "#272822",
-        "line_number_bg": "#3e3d32",
-        "line_number_fg": "#8f908a"
-    },
-    "dracula": {
-        "style": "dracula",
-        "background": "#282a36",
-        "line_number_bg": "#21222c",
-        "line_number_fg": "#6272a4"
-    },
-    "github-dark": {
-        "style": "github-dark",
-        "background": "#0d1117",
-        "line_number_bg": "#161b22",
-        "line_number_fg": "#484f58"
-    },
-    "one-dark": {
-        "style": "one-dark",
-        "background": "#282c34",
-        "line_number_bg": "#21252b",
-        "line_number_fg": "#636d83"
-    },
-    "vs-dark": {
-        "style": "vs",
-        "background": "#1e1e1e",
-        "line_number_bg": "#252526",
-        "line_number_fg": "#858585"
-    },
-    "nord": {
-        "style": "nord",
-        "background": "#2e3440",
-        "line_number_bg": "#3b4252",
-        "line_number_fg": "#616e88"
-    }
-}
-
-
-def _find_available_font(font_name: str, font_size: int = 14) -> str:
-    """查找可用字体，如果指定字体不可用则使用回退列表
-    
-    Args:
-        font_name: 首选字体名称
-        font_size: 字体大小（用于测试）
-    
-    Returns:
-        可用的字体名称
-    """
-    # 首先尝试用户指定的字体
-    fonts_to_try = [font_name] if font_name else []
-    # 添加回退列表
-    fonts_to_try.extend(FONT_FALLBACK_LIST)
-    
-    for font in fonts_to_try:
-        try:
-            # 尝试创建 ImageFormatter 来验证字体可用性
-            test_formatter = ImageFormatter(font_name=font, font_size=font_size)
-            # 如果没有抛出异常，字体可用
-            logger.debug(f"使用字体: {font}")
-            return font
-        except Exception as e:
-            logger.debug(f"字体 {font} 不可用: {e}")
-            continue
-    
-    # 如果所有字体都不可用，返回 None 让 pygments 使用默认字体
-    logger.warning("所有字体都不可用，使用 pygments 默认字体")
-    return None
-
-
-class LjosLexer(RegexLexer):
-    """Lexer for Ljos language."""
-    name = 'Ljos'
-    aliases = ['ljos', 'lj']
-    filenames = ['*.lj', '*.ljos']
-
-    tokens = {
-        'root': [
-            (r'\s+', Text),
-            # Comments
-            (r'#.*$', Comment.Single),
-            (r'/\*', Comment.Multiline, 'comment'),
-            (r"''", Comment.Special, 'doc_comment'),
-            
-            # Decorators
-            (r'(@)([a-zA-Z_][a-zA-Z0-9_]*)', bygroups(Punctuation, Name.Decorator)),
-            
-            # Strings
-            (r'"', String.Double, 'string'),
-            (r'`[^`]*`', String.Backtick),
-            
-            # Numbers
-            (r'\b0[bB][01]([01_]*[01])?\b', Number.Bin),
-            (r'\b0[oO][0-7]([0-7_]*[0-7])?\b', Number.Oct),
-            (r'\b0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?\b', Number.Hex),
-            (r'\b[0-9]([0-9_]*[0-9])?\.([0-9]([0-9_]*[0-9])?)?([eE][+-]?[0-9]([0-9_]*[0-9])?)?\b', Number.Float),
-            (r'\b[0-9]([0-9_]*[0-9])?\b', Number.Integer),
-            
-            # Keywords and Constants
-            (words((
-                'nul', 'true', 'false'
-            ), suffix=r'\b'), Keyword.Constant),
-            
-            (words((
-                'mut', 'const', 'readonly', 'public', 'private', 'protected', 
-                'static', 'abstract', 'final', 'override'
-            ), suffix=r'\b'), Keyword.Declaration),
-            
-            (words((
-                'if', 'else', 'for', 'while', 'do', 'when', 'break', 'continue', 
-                'return', 'throw', 'try', 'catch', 'finally'
-            ), suffix=r'\b'), Keyword.Control),
-            
-            (words((
-                'is', 'of', 'in', 'as', 'typeof', 'instanceof'
-            ), suffix=r'\b'), Operator.Word),
-            
-            (words((
-                'fn', 'type', 'where', 'go', 'defer', 'move', 'borrow', 'using', 
-                'macro', 'async', 'await', 'yield'
-            ), suffix=r'\b'), Keyword),
-            
-            (words((
-                'class', 'interface', 'enum', 'extends', 'implements', 'constructor', 
-                'new', 'this', 'super', 'import', 'export', 'default'
-            ), suffix=r'\b'), Keyword.Declaration),
-            
-            # Types
-            (words((
-                'int', 'float', 'str', 'bool', 'bytes'
-            ), suffix=r'\b'), Keyword.Type),
-            
-            # Functions
-            (r'\b(fn)\s+([a-zA-Z_][a-zA-Z0-9_]*)', bygroups(Keyword, Name.Function)),
-            
-            # Names
-            (r'\b[A-Z][a-zA-Z0-9_]*\b', Name.Class),
-            (r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', Name),
-            
-            # Operators and Punctuation
-            (r'(==|!=|<=|>=|<|>|\+|-|\*|/|%|=|!|&|\||\.|:)', Operator),
-            (r'[(){}\[\],;]', Punctuation),
-        ],
-        'comment': [
-            (r'[^*/]+', Comment.Multiline),
-            (r'/\*', Comment.Multiline, '#push'),
-            (r'\*/', Comment.Multiline, '#pop'),
-            (r'[*/]', Comment.Multiline)
-        ],
-        'doc_comment': [
-            (r"[^']+", Comment.Special),
-            (r"''", Comment.Special, '#pop'),
-            (r"'", Comment.Special)
-        ],
-        'string': [
-            (r'[^"\\$]+', String.Double),
-            (r'\\.', String.Escape),
-            (r'"', String.Double, '#pop'),
-            (r'\$\{', String.Interpol, 'interpol'),
-            (r'\$', String.Double)
-        ],
-        'interpol': [
-            (r'\}', String.Interpol, '#pop'),
-            (include('root'))
-        ]
-    }
-
-
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.3.2")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.3.3")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -463,9 +280,7 @@ class CodeRenderPlugin(Star):
 
     def _get_lexer(self, language: str, code: str):
         """获取语法高亮器"""
-        # 优先使用自定义 lexer
-        if language.lower() == 'ljos':
-            return LjosLexer(stripall=True)
+
             
         # 检查是否有自定义的 pygments_lexer 映射
         lang_config = self.languages.get(language, {})
@@ -957,19 +772,6 @@ class CodeRenderPlugin(Star):
             logger.error(f"渲染代码时发生错误: {e}")
             yield event.plain_result(f"❌ 渲染失败: {str(e)}")
 
-    @filter.command("render_themes")
-    async def list_themes(self, event: AstrMessageEvent):
-        """列出支持的代码主题"""
-        if self._is_group_blocked(event):
-            return
-        
-        lines = ["🎨 支持的代码主题:\n"]
-        for theme_name in THEMES.keys():
-            lines.append(f"• {theme_name}")
-        
-        lines.append("\n💡 使用 /render -t <主题名> 指定主题")
-        
-        yield event.plain_result("\n".join(lines))
 
     @filter.command("render_file")
     async def render_file(
@@ -1086,28 +888,6 @@ class CodeRenderPlugin(Star):
         except Exception as e:
             logger.error(f"处理文件渲染时发生错误: {e}")
             yield event.plain_result(f"❌ 处理失败: {str(e)}")
-
-    @filter.command("render_langs")
-    async def list_languages(self, event: AstrMessageEvent):
-        """列出支持的编程语言"""
-        if self._is_group_blocked(event):
-            return
-        
-        # 按字母排序
-        sorted_langs = sorted(self.languages.items(), key=lambda x: x[0])
-        
-        # 分组显示
-        lines = ["📋 支持的编程语言:\n"]
-        for lang, info in sorted_langs:
-            display_name = info.get("display_name", lang)
-            aliases = info.get("aliases", [])
-            alias_str = f" ({', '.join(aliases)})" if aliases else ""
-            lines.append(f"• {display_name}{alias_str}")
-        
-        lines.append(f"\n共 {len(self.languages)} 种语言")
-        lines.append("💡 可在 custom_languages.json 中添加更多语言")
-        
-        yield event.plain_result("\n".join(lines))
 
     async def terminate(self):
         """插件销毁时清理"""

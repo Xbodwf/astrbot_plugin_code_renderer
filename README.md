@@ -74,16 +74,132 @@ def hello():
 
 浏览仓库目录/assets/highlight/styles即可。
 
-## 添加自定义语言
+# 自定义语言配置说明
 
-尚未完成
+## 概述
 
-## 依赖
+此插件支持通过 JSON 文件定义自定义语言，并自动注册到 highlight.js 中进行语法高亮。
 
-- Pillow >= 9.0.0
-- Pygments >= 2.15.0
+## 配置文件位置
+
+将自定义语言的 JSON 文件放置在插件根目录的 `languages/` 文件夹中。文件名（不含扩展名）将作为语言标识符。
+
+例如：`languages/mylang.json` 将注册为 `mylang` 语言。
+
+## JSON 结构
+
+### 必需字段
+
+- **name** (string): 语言的显示名称
+- **aliases** (array): 语言的别名列表
+- **extensions** (array): 该语言的文件扩展名列表
+
+### 可选字段
+
+#### keywords (object | array)
+
+定义语言的关键字。可以是简单的数组，或按类别分组的对象。
+
+**简单数组形式：**
+\`\`\`json
+"keywords": ["if", "else", "for", "while", "return"]
+\`\`\`
+
+**分类对象形式：**
+\`\`\`json
+"keywords": {
+  "keyword": ["if", "else", "for", "while"],
+  "type": ["int", "float", "string", "bool"],
+  "literal": ["true", "false", "null"],
+  "built_in": ["print", "console", "Math"]
+}
+\`\`\`
+
+#### strings (object)
+
+配置字符串匹配规则：
+
+\`\`\`json
+"strings": {
+  "double_quote": true,    // 支持双引号字符串 "..."
+  "single_quote": true,    // 支持单引号字符串 '...'
+  "backtick": false        // 支持反引号字符串 `...`
+}
+\`\`\`
+
+默认值：双引号和单引号均为 true，反引号为 false。
+
+#### numbers (object)
+
+配置数字匹配规则：
+
+\`\`\`json
+"numbers": {
+  "use_default": true,     // 使用 highlight.js 默认数字模式
+  "binary": true,          // 支持二进制 0b1010
+  "octal": true,           // 支持八进制 0o755
+  "hex": true,             // 支持十六进制 0xFF
+  "decimal": true          // 支持十进制和浮点数
+}
+\`\`\`
+
+如果 `use_default` 为 true，将使用 highlight.js 的 C_NUMBER_MODE。
+
+#### patterns (array)
+
+定义额外的语法模式：
+
+\`\`\`json
+"patterns": [
+  {
+    "className": "meta",
+    "begin": "@[A-Za-z_][A-Za-z0-9_]*"
+  },
+  {
+    "className": "function",
+    "begin": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+    "keywords": "fn"
+  }
+]
+\`\`\`
+
+每个模式支持的字段：
+- **className**: highlight.js 的类名（如 "function", "class", "meta", "comment" 等）
+- **begin**: 匹配开始的正则表达式
+- **end**: 匹配结束的正则表达式（可选）
+- **keywords**: 该模式内的关键字（可选）
+
+## 完整示例
+
+参见 `languages/ljos.json` 和 `languages/esharp.json` 文件。
+
+### 最小示例
+
+\`\`\`json
+{
+  "name": "MyLang",
+  "aliases": ["ml", "mylang"],
+  "extensions": [".ml", ".mylang"],
+  "keywords": ["if", "else", "for", "while", "fn", "return"],
+  "strings": {
+    "double_quote": true,
+    "single_quote": false
+  }
+}
+\`\`\`
+
+## 使用方法
+
+1. 创建语言定义 JSON 文件
+2. 放置到 `languages/` 文件夹
+3. 重启插件
+4. 使用文件扩展名或语言名称触发高亮
 
 ## 注意事项
 
-- 插件启动时会自动清理临时文件
-- 渲染的图片会在 15 分钟后自动清理
+- 文件名会成为语言标识符，建议使用小写字母和下划线
+- aliases 数组中的别名也可以用于识别该语言
+- 插件会自动将语言定义注册到 highlight.js
+- 语言检测主要依赖 highlight.js 的自动检测功能
+- 提供的扩展名会用于文件名匹配
+

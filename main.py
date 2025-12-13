@@ -27,12 +27,12 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.0")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.5")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
         self.config = config
-        self.languages = {}
+        self.custom_languages = {}  # Store custom language definitions for highlight.js registration
         self.temp_dir = os.path.join(get_astrbot_data_path(), "temp", "code_render")
         self._cached_font = None  # 缓存可用字体
         self._playwright = None   # 全局 Playwright 实例
@@ -40,8 +40,7 @@ class CodeRenderPlugin(Star):
 
     async def initialize(self):
         """插件初始化"""
-        # 加载语言配置
-        self._load_languages()
+        self._load_custom_languages()
         
         # 创建临时目录
         os.makedirs(self.temp_dir, exist_ok=True)
@@ -65,7 +64,7 @@ class CodeRenderPlugin(Star):
         # 启动定期清理任务
         asyncio.create_task(self._periodic_cleanup())
         
-        logger.info(f"代码预览器插件已初始化，支持 {len(self.languages)} 种语言")
+        logger.info(f"代码预览器插件已初始化，加载了 {len(self.custom_languages)} 个自定义语言")
 
     def _find_cjk_font(self, font_size: int):
         """跨平台寻找可用的 CJK 字体"""
@@ -133,33 +132,38 @@ class CodeRenderPlugin(Star):
                 
         return None
 
-    def _load_languages(self):
-        """加载语言配置文件"""
+    def _load_custom_languages(self):
+        """从 languages 文件夹加载自定义语言定义用于 highlight.js 注册"""
         plugin_dir = Path(__file__).parent
-        lang_file = plugin_dir / "languages.json"
+        languages_dir = plugin_dir / "languages"
         
-        # 加载用户自定义语言配置
-        custom_lang_file = plugin_dir / "custom_languages.json"
+        if not languages_dir.exists():
+            logger.info("languages 文件夹不存在，跳过自定义语言加载")
+            return
         
-        try:
-            with open(lang_file, "r", encoding="utf-8") as f:
-                self.languages = json.load(f)
-                # 移除注释字段
-                self.languages.pop("_comment", None)
-        except Exception as e:
-            logger.error(f"加载语言配置失败: {e}")
-            self.languages = {}
+        json_files = list(languages_dir.glob("*.json"))
+        if not json_files:
+            logger.info("languages 文件夹中没有找到 JSON 文件")
+            return
         
-        # 加载自定义语言配置（如果存在）
-        if custom_lang_file.exists():
+        for json_file in json_files:
             try:
-                with open(custom_lang_file, "r", encoding="utf-8") as f:
-                    custom_langs = json.load(f)
-                    custom_langs.pop("_comment", None)
-                    self.languages.update(custom_langs)
-                    logger.info(f"已加载自定义语言配置: {len(custom_langs)} 种")
+                with open(json_file, "r", encoding="utf-8") as f:
+                    lang_def = json.load(f)
+                    
+                # 验证必需字段
+                if "name" not in lang_def:
+                    logger.warning(f"跳过 {json_file.name}: 缺少 'name' 字段")
+                    continue
+                
+                lang_id = json_file.stem  # 使用文件名作为语言标识符
+                self.custom_languages[lang_id] = lang_def
+                logger.info(f"已加载自定义语言: {lang_id} ({lang_def['name']})")
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"解析 {json_file.name} 失败: {e}")
             except Exception as e:
-                logger.warning(f"加载自定义语言配置失败: {e}")
+                logger.error(f"加载 {json_file.name} 时出错: {e}")
 
     async def _cleanup_temp_files(self):
         """清理临时文件"""
@@ -228,101 +232,31 @@ class CodeRenderPlugin(Star):
         return session_id in blacklist
 
     def _detect_language(self, code: str, hint: str = None, filename: str = None) -> str:
-        """检测代码语言"""
-        # 如果提供了语言提示
+        """检测代码语言 - 现在完全依赖 highlight.js 自动检测，仅处理提示和文件扩展名"""
+        # 如果提供了语言提示，直接返回（让 highlight.js 处理）
         if hint:
-            hint_lower = hint.lower().strip()
-            # 直接匹配语言名
-            if hint_lower in self.languages:
-                return hint_lower
-            # 匹配别名
-            for lang, info in self.languages.items():
-                if hint_lower in info.get("aliases", []):
-                    return lang
+            return hint.lower().strip()
         
-        # 如果提供了文件名，根据扩展名判断
+        # 如果提供了文件名，尝试从自定义语言中匹配扩展名
         if filename:
             ext = os.path.splitext(filename)[1].lower()
-            for lang, info in self.languages.items():
-                if ext in info.get("extensions", []):
-                    return lang
+            for lang_id, lang_def in self.custom_languages.items():
+                if ext in lang_def.get("extensions", []):
+                    return lang_id
         
-        # 使用 pygments 猜测语言
-        try:
-            lexer = guess_lexer(code)
-            
-            # 1. 尝试匹配 lexer 名称到配置的 key
-            lexer_name = lexer.name.lower()
-            if lexer_name in self.languages:
-                return lexer_name
-            
-            # 2. 检查 lexer 名称是否匹配配置中的别名
-            for lang, info in self.languages.items():
-                if lexer_name in info.get("aliases", []):
-                    return lang
-
-            # 3. 尝试匹配 lexer 别名到配置的 key 或别名
-            if lexer.aliases:
-                for alias in lexer.aliases:
-                    alias_lower = alias.lower()
-                    # 检查 key
-                    if alias_lower in self.languages:
-                        return alias_lower
-                    # 检查配置中的别名
-                    for lang, info in self.languages.items():
-                        if alias_lower in info.get("aliases", []):
-                            return lang
-            
-            # 4. 如果没找到匹配的配置，返回 pygments 的第一个别名
-            return lexer.aliases[0] if lexer.aliases else "text"
-        except ClassNotFound:
-            return "text"
+        return ""
 
     def _get_lexer(self, language: str, code: str):
-        """获取语法高亮器"""
-
-            
-        # 检查是否有自定义的 pygments_lexer 映射
-        lang_config = self.languages.get(language, {})
-        lexer_name = lang_config.get("pygments_lexer", language)
-        
+        """获取 Pygments 语法高亮器（仅用于旧的图片渲染方式）"""
+        # Pygments lexer 仅在不使用 Playwright 时需要
         try:
-            return get_lexer_by_name(lexer_name, stripall=True)
+            return get_lexer_by_name(language, stripall=True)
         except ClassNotFound:
-            # 如果指定的 lexer 不存在，尝试原语言名
-            if lexer_name != language:
-                try:
-                    return get_lexer_by_name(language, stripall=True)
-                except ClassNotFound:
-                    pass
             # 尝试猜测
             try:
                 return guess_lexer(code)
             except ClassNotFound:
                 return get_lexer_by_name("text", stripall=True)
-
-    def _extract_code_from_message(self, text: str) -> tuple[str, str]:
-        """从消息中提取代码和语言提示
-        
-        Returns:
-            (code, language_hint)
-        """
-        # 匹配 markdown 代码块 ```language\ncode```
-        code_block_pattern = r'```(\w*)\n?([\s\S]*?)```'
-        match = re.search(code_block_pattern, text)
-        if match:
-            lang_hint = match.group(1) or None
-            code = match.group(2).strip()
-            return code, lang_hint
-        
-        # 匹配单行代码 `code`
-        inline_code_pattern = r'`([^`]+)`'
-        match = re.search(inline_code_pattern, text)
-        if match:
-            return match.group(1), None
-        
-        # 没有代码块标记，返回原文本
-        return text.strip(), None
 
     async def _render_code_to_image(
         self,
@@ -397,79 +331,10 @@ class CodeRenderPlugin(Star):
             logger.error(f"读取 highlight.js 失败: {e}")
             hljs_source = ""
 
-        # 为 Ljos 语言追加自定义 highlight.js 语言定义
-        ljos_hljs_def = r"""
-; (function() {
-    function ljosLanguage(hljs) {
-        const KEYWORDS = {
-            keyword:
-                'mut const readonly public private protected static abstract final override ' +
-                'if else for while do when break continue return throw try catch finally ' +
-                'fn type where go defer move borrow using macro async await yield ' +
-                'class interface enum extends implements constructor new this super import export default',
-            literal:
-                'nul true false',
-            type:
-                'int float str bool bytes'
-        };
-
-        return {
-            name: 'Ljos',
-            aliases: ['lj'],
-            keywords: KEYWORDS,
-            contains: [
-                hljs.C_LINE_COMMENT_MODE,
-                hljs.C_BLOCK_COMMENT_MODE,
-                {
-                    className: 'string',
-                    variants: [
-                        hljs.QUOTE_DOUBLE_MODE,
-                        {
-                            begin: '`', end: '`'
-                        }
-                    ]
-                },
-                {
-                    className: 'number',
-                    variants: [
-                        { begin: /0[bB][01]([01_]*[01])?\b/ },
-                        { begin: /0[oO][0-7]([0-7_]*[0-7])?\b/ },
-                        { begin: /0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?\b/ },
-                        { begin: /[0-9]([0-9_]*[0-9])?\.[0-9]([0-9_]*[0-9])?([eE][+-]?[0-9]([0-9_]*[0-9])?)?\b/ },
-                        { begin: /[0-9]([0-9_]*[0-9])?\b/ }
-                    ],
-                    relevance: 0
-                },
-                {
-                    className: 'meta',
-                    begin: '@[A-Za-z_][A-Za-z0-9_]*'
-                },
-                {
-                    className: 'function',
-                    beginKeywords: 'fn',
-                    end: /\(/,
-                    excludeEnd: true,
-                    contains: [hljs.inherit(hljs.TITLE_MODE, { begin: /[A-Za-z_][A-Za-z0-9_]*/ })]
-                },
-                {
-                    className: 'class',
-                    beginKeywords: 'class interface enum',
-                    end: /\{/,
-                    excludeEnd: true,
-                    contains: [hljs.inherit(hljs.TITLE_MODE, { begin: /[A-Z][A-Za-z0-9_]*/ })]
-                }
-            ]
-        };
-    }
-
-    if (typeof window !== 'undefined' && window.hljs && !window.hljs.getLanguage('ljos')) {
-        window.hljs.registerLanguage('ljos', ljosLanguage);
-    }
-})();
-"""
+        custom_lang_scripts = self._generate_hljs_language_registrations()
 
         # 避免内联脚本中出现 </script> 终止标签
-        full_hljs_source = (hljs_source or '') + ljos_hljs_def
+        full_hljs_source = (hljs_source or '') + custom_lang_scripts
         hljs_inline = full_hljs_source.replace("</script>", "<\\/script>") if full_hljs_source else ""
 
         # 将代码安全转义后塞进 template
@@ -740,7 +605,7 @@ class CodeRenderPlugin(Star):
             final_language = self._detect_language(code)
         
         # 获取语言显示名称
-        lang_display = self.languages.get(final_language, {}).get("display_name", final_language)
+        lang_display = final_language
         theme_display = final_theme or (self.config.get("theme", "monokai") if self.config else "monokai")
         
         try:
@@ -862,7 +727,7 @@ class CodeRenderPlugin(Star):
                 final_language = self._detect_language(code, filename=file_name)
             
             # 获取显示名称
-            lang_display = self.languages.get(final_language, {}).get("display_name", final_language)
+            lang_display = final_language
             theme_display = final_theme or (self.config.get("theme", "monokai") if self.config else "monokai")
 
             # 渲染
@@ -910,3 +775,166 @@ class CodeRenderPlugin(Star):
                 logger.info("CodeRender Playwright 实例已停止")
         except Exception as e:
             logger.error(f"停止 Playwright 实例时出错: {e}")
+
+    def _generate_hljs_language_registrations(self) -> str:
+        """生成自定义语言的 highlight.js 注册代码"""
+        if not self.custom_languages:
+            return ""
+        
+        registrations = []
+        
+        for lang_id, lang_def in self.custom_languages.items():
+            # 生成 highlight.js 语言定义
+            hljs_def = self._convert_to_hljs_definition(lang_id, lang_def)
+            registrations.append(hljs_def)
+        
+        return "\n".join(registrations)
+    
+    def _convert_to_hljs_definition(self, lang_id: str, lang_def: dict) -> str:
+        """将自定义语言定义转换为 highlight.js 注册代码"""
+        name = lang_def.get("name", lang_id)
+        aliases = json.dumps(lang_def.get("aliases", []))
+        keywords = self._format_hljs_keywords(lang_def.get("keywords", {}))
+        
+        # 构建 contains 数组
+        contains = ["hljs.C_LINE_COMMENT_MODE", "hljs.C_BLOCK_COMMENT_MODE"]
+        
+        # 添加字符串模式
+        if lang_def.get("strings"):
+            contains.append(self._format_string_mode(lang_def["strings"]))
+        else:
+            contains.append("""
+            {
+                className: 'string',
+                variants: [
+                    hljs.QUOTE_STRING_MODE,
+                    hljs.APOS_STRING_MODE
+                ]
+            }""")
+        
+        # 添加数字模式
+        if lang_def.get("numbers"):
+            contains.append(self._format_number_mode(lang_def["numbers"]))
+        else:
+            contains.append("hljs.C_NUMBER_MODE")
+        
+        # 添加其他自定义模式
+        if lang_def.get("patterns"):
+            for pattern in lang_def["patterns"]:
+                contains.append(self._format_custom_pattern(pattern))
+        
+        contains_str = ",\n                ".join(contains)
+        
+        return f"""
+;(function() {{
+    function {lang_id}Language(hljs) {{
+        return {{
+            name: '{name}',
+            aliases: {aliases},
+            keywords: {keywords},
+            contains: [
+                {contains_str}
+            ]
+        }};
+    }}
+
+    if (typeof window !== 'undefined' && window.hljs && !window.hljs.getLanguage('{lang_id}')) {{
+        window.hljs.registerLanguage('{lang_id}', {lang_id}Language);
+    }}
+}})();
+"""
+    
+    def _format_hljs_keywords(self, keywords: dict | list) -> str:
+        """格式化关键字为 highlight.js 格式"""
+        if isinstance(keywords, list):
+            # 简单列表形式，转换为字符串
+            return json.dumps(" ".join(keywords))
+        elif isinstance(keywords, dict):
+            # 字典形式，保留分类
+            formatted = {}
+            for key, value in keywords.items():
+                if isinstance(value, list):
+                    formatted[key] = " ".join(value)
+                else:
+                    formatted[key] = value
+            return json.dumps(formatted)
+        else:
+            return "{}"
+    
+    def _format_string_mode(self, string_config: dict) -> str:
+        """格式化字符串模式"""
+        variants = []
+        if string_config.get("double_quote", True):
+            variants.append("hljs.QUOTE_STRING_MODE")
+        if string_config.get("single_quote", True):
+            variants.append("hljs.APOS_STRING_MODE")
+        if string_config.get("backtick"):
+            variants.append("{ begin: '`', end: '`' }")
+        
+        return f"""{{
+                className: 'string',
+                variants: [{", ".join(variants)}]
+            }}"""
+    
+    def _format_number_mode(self, number_config: dict) -> str:
+        """格式化数字模式"""
+        if number_config.get("use_default", True):
+            return "hljs.C_NUMBER_MODE"
+        
+        variants = []
+        if number_config.get("binary"):
+            variants.append("{ begin: /0[bB][01]+/ }")
+        if number_config.get("octal"):
+            variants.append("{ begin: /0[oO][0-7]+/ }")
+        if number_config.get("hex"):
+            variants.append("{ begin: /0[xX][0-9A-Fa-f]+/ }")
+        if number_config.get("decimal", True):
+            variants.append("{ begin: /\\d+(\\.\\d+)?([eE][+-]?\\d+)?/ }")
+        
+        return f"""{{
+                className: 'number',
+                variants: [{", ".join(variants)}],
+                relevance: 0
+            }}"""
+    
+    def _format_custom_pattern(self, pattern: dict) -> str:
+        """格式化自定义模式"""
+        class_name = pattern.get("className", "")
+        begin = pattern.get("begin", "")
+        end = pattern.get("end", "")
+        keywords = pattern.get("keywords", "")
+        
+        parts = [f"className: '{class_name}'"]
+        if begin:
+            parts.append(f"begin: /{begin}/")
+        if end:
+            parts.append(f"end: /{end}/")
+        if keywords:
+            parts.append(f"keywords: '{keywords}'")
+        
+        return f"""{{
+                {", ".join(parts)}
+            }}"""
+
+    def _extract_code_from_message(self, text: str) -> tuple[str, str]:
+        """从消息中提取代码和语言提示
+        
+        Returns:
+            (code, language_hint)
+        """
+        # 匹配 markdown 代码块 \`\`\`language\ncode\`\`\`
+        code_block_pattern = r'\`\`\`(\w*)\n?([\s\S]*?)\`\`\`'
+        match = re.search(code_block_pattern, text)
+        if match:
+            lang_hint = match.group(1) or None
+            code = match.group(2).strip()
+            return code, lang_hint
+        
+        # 匹配单行代码 `code`
+        inline_code_pattern = r'`([^`]+)`'
+        match = re.search(inline_code_pattern, text)
+        if match:
+            return match.group(1), None
+        
+        # 没有代码块标记，返回原文本
+        return text.strip(), None

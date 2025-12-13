@@ -27,7 +27,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.5")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.0")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -37,6 +37,71 @@ class CodeRenderPlugin(Star):
         self._cached_font = None  # 缓存可用字体
         self._playwright = None   # 全局 Playwright 实例
         self._browser = None      # 共享浏览器实例
+
+        self.standard_language_map = {
+            # 常见编程语言
+            '.py': 'python',
+            '.js': 'javascript',
+            '.ts': 'typescript',
+            '.jsx': 'javascript',
+            '.tsx': 'typescript',
+            '.java': 'java',
+            '.c': 'c',
+            '.cpp': 'cpp',
+            '.cc': 'cpp',
+            '.cxx': 'cpp',
+            '.h': 'c',
+            '.hpp': 'cpp',
+            '.cs': 'csharp',
+            '.php': 'php',
+            '.rb': 'ruby',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.swift': 'swift',
+            '.kt': 'kotlin',
+            '.scala': 'scala',
+            '.r': 'r',
+            '.m': 'objectivec',
+            '.mm': 'objectivec',
+            
+            # Web 技术
+            '.html': 'html',
+            '.htm': 'html',
+            '.xml': 'xml',
+            '.css': 'css',
+            '.scss': 'scss',
+            '.sass': 'sass',
+            '.less': 'less',
+            '.json': 'json',
+            '.yaml': 'yaml',
+            '.yml': 'yaml',
+            '.toml': 'toml',
+            '.md': 'markdown',
+            '.markdown': 'markdown',
+            
+            # Shell 和脚本
+            '.sh': 'bash',
+            '.bash': 'bash',
+            '.zsh': 'bash',
+            '.ps1': 'powershell',
+            '.bat': 'batch',
+            '.cmd': 'batch',
+            
+            # 数据库
+            '.sql': 'sql',
+            
+            # 其他
+            '.lua': 'lua',
+            '.vim': 'vim',
+            '.diff': 'diff',
+            '.patch': 'diff',
+            '.ini': 'ini',
+            '.cfg': 'ini',
+            '.conf': 'nginx',
+            '.dockerfile': 'dockerfile',
+        }
+        
+        self._load_custom_languages()
 
     async def initialize(self):
         """插件初始化"""
@@ -237,14 +302,20 @@ class CodeRenderPlugin(Star):
         if hint:
             return hint.lower().strip()
         
-        # 如果提供了文件名，尝试从自定义语言中匹配扩展名
+        # 如果提供了文件名，尝试匹配扩展名
         if filename:
             ext = os.path.splitext(filename)[1].lower()
+            
+            # 优先检查自定义语言的扩展名
             for lang_id, lang_def in self.custom_languages.items():
                 if ext in lang_def.get("extensions", []):
                     return lang_id
+            
+            # 检查标准语言映射
+            if ext in self.standard_language_map:
+                return self.standard_language_map[ext]
         
-        return ""
+        return None
 
     def _get_lexer(self, language: str, code: str):
         """获取 Pygments 语法高亮器（仅用于旧的图片渲染方式）"""
@@ -339,7 +410,7 @@ class CodeRenderPlugin(Star):
 
         # 将代码安全转义后塞进 template
         escaped_code = html.escape(code)
-        language_class = language or "plaintext"
+        language_class = language if language else ""
 
         html_content = f"""<!DOCTYPE html>
 <html>
@@ -370,13 +441,30 @@ class CodeRenderPlugin(Star):
     </style>
     <script>{hljs_inline}</script>
     <script>
-    // 等待 highlight.js 加载完成后再执行高亮，避免 set_content 时机问题
     (function () {{
         function applyHighlight() {{
             const blocks = document.querySelectorAll('pre code');
             for (const block of blocks) {{
                 try {{
-                    window.hljs && window.hljs.highlightElement(block);
+                    if (!window.hljs) {{
+                        console.error('highlight.js not loaded');
+                        continue;
+                    }}
+                    
+                    // 检查是否有指定语言类
+                    const classes = Array.from(block.classList);
+                    const hasLanguage = classes.some(cls => cls.startsWith('language-') && cls !== 'language-');
+                    
+                    if (hasLanguage) {{
+                        // 有指定语言，使用 highlightElement
+                        window.hljs.highlightElement(block);
+                    }} else {{
+                        // 没有指定语言，使用 highlightAuto 自动检测
+                        const result = window.hljs.highlightAuto(block.textContent);
+                        block.innerHTML = result.value;
+                        block.className = 'hljs ' + result.language;
+                        console.log('[v0] Auto-detected language:', result.language);
+                    }}
                 }} catch (e) {{
                     console.error('highlight.js error', e);
                 }}
@@ -404,7 +492,7 @@ class CodeRenderPlugin(Star):
 </head>
 <body>
     <div class="code-container">
-        <pre><code class="hljs language-{language_class}">{escaped_code}</code></pre>
+        <pre><code class="hljs{' language-' + language_class if language_class else ''}">{escaped_code}</code></pre>
     </div>
 </body>
 </html>

@@ -465,12 +465,12 @@ class CodeRenderPlugin(Star):
                 }},
                 {{
                     className: 'function',
-                    match: /[A-Za-z_][A-Za-z0-9_]*\\s*(?=\\()/,
+                    match: /[A-Za-z_][A-Za-z0-9_]*\s*(?=\()/,
                     relevance: 0
                 }},
                 {{
                     className: 'class',
-                    match: /class\\s+[A-Za-z_][A-Za-z0-9_]*/,
+                    match: /class\s+[A-Za-z_][A-Za-z0-9_]*/,
                     relevance: 0
                 }}
             ]

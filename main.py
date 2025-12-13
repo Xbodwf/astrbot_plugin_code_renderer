@@ -27,19 +27,19 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.0")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.6")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
         self.config = config
         self.custom_languages = {}  # Store custom language definitions for highlight.js registration
         self.temp_dir = os.path.join(get_astrbot_data_path(), "temp", "code_render")
-        self._cached_font = None  # 缓存可用字体
-        self._playwright = None   # 全局 Playwright 实例
-        self._browser = None      # 共享浏览器实例
+        self._cached_font = None  # Cached available font
+        self._playwright = None   # Global Playwright instance
+        self._browser = None      # Shared browser instance
 
         self.standard_language_map = {
-            # 常见编程语言
+            # Common programming languages
             '.py': 'python',
             '.js': 'javascript',
             '.ts': 'typescript',
@@ -64,7 +64,7 @@ class CodeRenderPlugin(Star):
             '.m': 'objectivec',
             '.mm': 'objectivec',
             
-            # Web 技术
+            # Web technologies
             '.html': 'html',
             '.htm': 'html',
             '.xml': 'xml',
@@ -79,7 +79,7 @@ class CodeRenderPlugin(Star):
             '.md': 'markdown',
             '.markdown': 'markdown',
             
-            # Shell 和脚本
+            # Shell and scripts
             '.sh': 'bash',
             '.bash': 'bash',
             '.zsh': 'bash',
@@ -87,10 +87,10 @@ class CodeRenderPlugin(Star):
             '.bat': 'batch',
             '.cmd': 'batch',
             
-            # 数据库
+            # Database
             '.sql': 'sql',
             
-            # 其他
+            # Others
             '.lua': 'lua',
             '.vim': 'vim',
             '.diff': 'diff',
@@ -104,16 +104,16 @@ class CodeRenderPlugin(Star):
         self._load_custom_languages()
 
     async def initialize(self):
-        """插件初始化"""
+        """Initialize the plugin"""
         self._load_custom_languages()
         
-        # 创建临时目录
+        # Create temp directory
         os.makedirs(self.temp_dir, exist_ok=True)
 
-        # 确保 Playwright 浏览器可用
+        # Ensure Playwright browser is available
         await self._ensure_playwright_browser()
 
-        # 启动共享 Playwright 浏览器实例
+        # Start shared Playwright browser instance
         try:
             if self._playwright is None:
                 self._playwright = await async_playwright().start()
@@ -123,16 +123,16 @@ class CodeRenderPlugin(Star):
         except Exception as e:
             logger.error(f"启动 Playwright 浏览器失败: {e}")
 
-        # 启动时清理临时文件
+        # Clean up temp files on startup
         await self._cleanup_temp_files()
 
-        # 启动定期清理任务
+        # Start periodic cleanup task
         asyncio.create_task(self._periodic_cleanup())
         
         logger.info(f"代码预览器插件已初始化，加载了 {len(self.custom_languages)} 个自定义语言")
 
     def _find_cjk_font(self, font_size: int):
-        """跨平台寻找可用的 CJK 字体"""
+        """Find available CJK font across platforms"""
         system = platform.system()
         font_names = []
         font_dirs = []
@@ -169,26 +169,26 @@ class CodeRenderPlugin(Star):
                 os.path.expanduser("~/.local/share/fonts")
             ]
 
-        # 遍历目录查找
+        # Search through directories
         for directory in font_dirs:
             if not os.path.exists(directory):
                 continue
             for root, dirs, files in os.walk(directory):
                 for filename in files:
-                    # 精确匹配
+                    # Exact match
                     if filename in font_names:
                         try:
                             return ImageFont.truetype(os.path.join(root, filename), font_size)
                         except Exception:
                             continue
-                    # 模糊匹配 Noto Sans CJK
+                    # Fuzzy match for Noto Sans CJK
                     if "NotoSansSC" in filename and filename.endswith((".otf", ".ttf", ".ttc")):
                         try:
                             return ImageFont.truetype(os.path.join(root, filename), font_size)
                         except Exception:
                             continue
 
-        # 回退：尝试直接加载名称 (依赖系统路径配置)
+        # Fallback: Try loading by name directly (relies on system path configuration)
         for name in font_names:
             try:
                 return ImageFont.truetype(name, font_size)
@@ -198,17 +198,17 @@ class CodeRenderPlugin(Star):
         return None
 
     def _load_custom_languages(self):
-        """从 languages 文件夹加载自定义语言定义用于 highlight.js 注册"""
+        """Load custom language definitions from languages folder for highlight.js registration"""
         plugin_dir = Path(__file__).parent
         languages_dir = plugin_dir / "languages"
         
         if not languages_dir.exists():
-            logger.info("languages 文件夹不存在，跳过自定义语言加载")
+            logger.info("languages directory does not exist, skipping custom language loading")
             return
         
         json_files = list(languages_dir.glob("*.json"))
         if not json_files:
-            logger.info("languages 文件夹中没有找到 JSON 文件")
+            logger.info("No JSON files found in languages directory")
             return
         
         for json_file in json_files:
@@ -216,22 +216,22 @@ class CodeRenderPlugin(Star):
                 with open(json_file, "r", encoding="utf-8") as f:
                     lang_def = json.load(f)
                     
-                # 验证必需字段
+                # Validate required fields
                 if "name" not in lang_def:
-                    logger.warning(f"跳过 {json_file.name}: 缺少 'name' 字段")
+                    logger.warning(f"Skipping {json_file.name}: missing 'name' field")
                     continue
                 
-                lang_id = json_file.stem  # 使用文件名作为语言标识符
+                lang_id = json_file.stem  # Use filename as language identifier
                 self.custom_languages[lang_id] = lang_def
-                logger.info(f"已加载自定义语言: {lang_id} ({lang_def['name']})")
+                logger.info(f"Loaded custom language: {lang_id} ({lang_def['name']})")
                 
             except json.JSONDecodeError as e:
-                logger.error(f"解析 {json_file.name} 失败: {e}")
+                logger.error(f"Failed to parse {json_file.name}: {e}")
             except Exception as e:
-                logger.error(f"加载 {json_file.name} 时出错: {e}")
+                logger.error(f"Error loading {json_file.name}: {e}")
 
     async def _cleanup_temp_files(self):
-        """清理临时文件"""
+        """Clean up temporary files"""
         if not os.path.exists(self.temp_dir):
             return
         
@@ -243,22 +243,22 @@ class CodeRenderPlugin(Star):
                     os.remove(file_path)
                     count += 1
             except Exception as e:
-                logger.warning(f"删除临时文件失败 {filename}: {e}")
+                logger.warning(f"Failed to delete temporary file {filename}: {e}")
         
         if count > 0:
-            logger.info(f"已清理 {count} 个临时文件")
+            logger.info(f"Cleaned up {count} temporary files")
 
     async def _periodic_cleanup(self):
-        """定期清理超过1小时的临时文件"""
+        """Periodically clean up temporary files older than 1 hour"""
         while True:
             try:
-                await asyncio.sleep(900)  # 每15min检查一次
+                await asyncio.sleep(900)  # Check every 15 minutes
                 await self._cleanup_temp_files()
             except Exception as e:
-                logger.error(f"定期清理临时文件时出错: {e}")
+                logger.error(f"Error during periodic temp file cleanup: {e}")
 
     async def _ensure_playwright_browser(self):
-        """确保 Playwright 浏览器已安装并可用"""
+        """Ensure Playwright browser is installed and available"""
         try:
             from playwright.async_api import async_playwright as _ap
 
@@ -268,7 +268,7 @@ class CodeRenderPlugin(Star):
                     await browser.close()
                     #logger.info("Playwright Chromium 浏览器已就绪")
                 except Exception as e:
-                    logger.warning("Playwright 浏览器未安装或不可用，尝试自动安装 Chromium ...")
+                    logger.warning("Playwright browser not installed or unavailable, attempting to install Chromium...")
                     import subprocess as _sub
                     result = _sub.run([
                         "playwright",
@@ -276,16 +276,16 @@ class CodeRenderPlugin(Star):
                         "chromium",
                     ], capture_output=True, text=True)
                     if result.returncode == 0:
-                        logger.info("Playwright Chromium 安装成功")
+                        logger.info("Successfully installed Playwright Chromium")
                     else:
-                        logger.error(f"Playwright 浏览器自动安装失败: {result.stderr}")
-                        logger.error("请手动运行: playwright install chromium")
+                        logger.error(f"Failed to automatically install Playwright browser: {result.stderr}")
+                        logger.error("Please run manually: playwright install chromium")
         except Exception as e:
-            logger.error(f"检查 Playwright 浏览器时出错: {e}")
-            logger.error("如首次使用，请在命令行手动运行: playwright install chromium")
+            logger.error(f"Error checking Playwright browser: {e}")
+            logger.error("If this is the first time using, please run manually: playwright install chromium")
 
     def _is_group_blocked(self, event: AstrMessageEvent) -> bool:
-        """检查当前群是否在黑名单中"""
+        """Check if current group is in blacklist"""
         session_id = event.session_id
         if not session_id:
             return False
@@ -293,8 +293,8 @@ class CodeRenderPlugin(Star):
         return session_id in self.config.blacklist
 
     def _detect_language(self, code: str, hint: str = None, filename: str = None) -> str:
-        """检测代码语言 - 现在完全依赖 highlight.js 自动检测，仅处理提示和文件扩展名"""
-        # 如果提供了语言提示，直接返回（让 highlight.js 处理）
+        """Detect code language - now fully relies on highlight.js auto-detection, only handles hints and file extensions"""
+        # If language hint is provided, return it directly (let highlight.js handle it)
         if hint:
             return hint.lower().strip()
         
@@ -848,7 +848,7 @@ class CodeRenderPlugin(Star):
 
     @filter.llm_tool(name="render_code_to_image")
     async def render_code_image(
-        self, event: AstrMessageEvent, code: str,language: str = "",theme: str = "github",font_size: int = 16
+        self, event: AstrMessageEvent, code: str,language: str = "",theme: str = "github"
     ) -> MessageEventResult:
         """
         将代码渲染为图片并发送。
@@ -857,14 +857,13 @@ class CodeRenderPlugin(Star):
             code(str): 要渲染的代码
             language(str): 代码语言. 建议填写。
             theme(str): 主题名称. 建议为idea-light
-            font_size(int): 字体大小. 建议使用16
         """
         if not code or not code.strip():
             logger.warning("代码不能为空")
             yield event.plain_result("❌ 代码不能为空")
             return
             
-        logger.info(f"正在渲染代码: language={language}, theme={theme}, font_size={font_size}")
+        logger.info(f"正在渲染代码: language={language}, theme={theme}")
         
         try:
             # 渲染代码为图片
@@ -872,7 +871,6 @@ class CodeRenderPlugin(Star):
                 code=code,
                 language=language,
                 theme_override=theme,
-                font_size_override=font_size,
                 line_numbers_override=True
             )
             

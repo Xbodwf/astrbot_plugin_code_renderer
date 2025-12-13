@@ -134,8 +134,36 @@ class CodeRenderPlugin(Star):
         return None
 
     def _load_languages(self):
-        """加载语言配置文件（移除，语言检测交给 highlight.js）"""
         self.languages = {}
+        self._ext_lang_map = {}
+        try:
+            plugin_dir = Path(__file__).parent
+            languages_dir = plugin_dir / "languages"
+            if languages_dir.exists() and languages_dir.is_dir():
+                for fname in os.listdir(languages_dir):
+                    if not fname.lower().endswith(".json"):
+                        continue
+                    fpath = languages_dir / fname
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as jf:
+                            data = json.load(jf)
+                        name = str(data.get("name") or "").strip() or "CustomLang"
+                        aliases = data.get("aliases") or []
+                        register_as = (str(aliases[0]).lower() if isinstance(aliases, list) and aliases else name.lower())
+                        exts = data.get("extensions") or []
+                        for ext in exts:
+                            if isinstance(ext, str) and ext:
+                                self._ext_lang_map[ext.lower()] = register_as
+                        self.languages[register_as] = {
+                            "display_name": name,
+                            "aliases": aliases,
+                            "extensions": exts
+                        }
+                    except Exception:
+                        continue
+        except Exception:
+            self.languages = {}
+            self._ext_lang_map = {}
 
     async def _cleanup_temp_files(self):
         """清理临时文件"""
@@ -386,6 +414,8 @@ class CodeRenderPlugin(Star):
                         try:
                             with open(fpath, "r", encoding="utf-8") as jf:
                                 data = json.load(jf)
+                            if data.get("register") is False:
+                                continue
                             name = str(data.get("name") or "").strip() or "CustomLang"
                             aliases = data.get("aliases") or []
                             keywords_list = data.get("keywords") or []
@@ -922,9 +952,13 @@ class CodeRenderPlugin(Star):
                 yield event.plain_result("❌ 文件内容为空")
                 return
 
-            # 确定语言 (不自动检测，交给 highlight.js；仅接受用户强制指定)
+            # 确定语言（优先使用扩展名映射，其次自动）
             if not final_language:
-                final_language = None
+                ext = os.path.splitext(file_name)[1].lower()
+                if hasattr(self, "_ext_lang_map") and ext in self._ext_lang_map:
+                    final_language = self._ext_lang_map[ext]
+                else:
+                    final_language = None
             
             # 显示名称
             lang_display = final_language or "auto"

@@ -1,6 +1,7 @@
 {
   "name": "ESharp",
   "aliases": ["esharp"],
+  "extensions": [".es", ".esf"],
   "keywords": [
     "function", "class", "struct", "interface", "enum", "namespace",
     "public", "private", "protected", "internal", "static",

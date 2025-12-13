@@ -1,0 +1,9 @@
+{
+  "name": "Ljos",
+  "aliases": ["lj"],
+  "extensions": [".lj", ".ljs", ".ljm"],
+  "register": false,
+  "keywords": [],
+  "types": ["int", "float", "str", "bool", "bytes"],
+  "literals": ["nul", "true", "false"]
+}

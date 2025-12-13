@@ -27,7 +27,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.3.3")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.0")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)

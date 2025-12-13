@@ -27,7 +27,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.0")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.3.3")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -134,36 +134,32 @@ class CodeRenderPlugin(Star):
         return None
 
     def _load_languages(self):
-        self.languages = {}
-        self._ext_lang_map = {}
+        """加载语言配置文件"""
+        plugin_dir = Path(__file__).parent
+        lang_file = plugin_dir / "languages.json"
+        
+        # 加载用户自定义语言配置
+        custom_lang_file = plugin_dir / "custom_languages.json"
+        
         try:
-            plugin_dir = Path(__file__).parent
-            languages_dir = plugin_dir / "languages"
-            if languages_dir.exists() and languages_dir.is_dir():
-                for fname in os.listdir(languages_dir):
-                    if not fname.lower().endswith(".json"):
-                        continue
-                    fpath = languages_dir / fname
-                    try:
-                        with open(fpath, "r", encoding="utf-8") as jf:
-                            data = json.load(jf)
-                        name = str(data.get("name") or "").strip() or "CustomLang"
-                        aliases = data.get("aliases") or []
-                        register_as = (str(aliases[0]).lower() if isinstance(aliases, list) and aliases else name.lower())
-                        exts = data.get("extensions") or []
-                        for ext in exts:
-                            if isinstance(ext, str) and ext:
-                                self._ext_lang_map[ext.lower()] = register_as
-                        self.languages[register_as] = {
-                            "display_name": name,
-                            "aliases": aliases,
-                            "extensions": exts
-                        }
-                    except Exception:
-                        continue
-        except Exception:
+            with open(lang_file, "r", encoding="utf-8") as f:
+                self.languages = json.load(f)
+                # 移除注释字段
+                self.languages.pop("_comment", None)
+        except Exception as e:
+            logger.error(f"加载语言配置失败: {e}")
             self.languages = {}
-            self._ext_lang_map = {}
+        
+        # 加载自定义语言配置（如果存在）
+        if custom_lang_file.exists():
+            try:
+                with open(custom_lang_file, "r", encoding="utf-8") as f:
+                    custom_langs = json.load(f)
+                    custom_langs.pop("_comment", None)
+                    self.languages.update(custom_langs)
+                    logger.info(f"已加载自定义语言配置: {len(custom_langs)} 种")
+            except Exception as e:
+                logger.warning(f"加载自定义语言配置失败: {e}")
 
     async def _cleanup_temp_files(self):
         """清理临时文件"""
@@ -401,148 +397,84 @@ class CodeRenderPlugin(Star):
             logger.error(f"读取 highlight.js 失败: {e}")
             hljs_source = ""
 
-        # 读取内置语言模块并注册到 highlight.js
-        builtin_lang_sources = ""
-        try:
-            langs_dir = os.path.join(plugin_dir, "assets", "highlight", "es", "languages")
-            if os.path.isdir(langs_dir):
-                # 优先加载常用语言，随后加载其他语言
-                preferred = {
-                    "javascript.min.js", "python.min.js", "json.min.js",
-                    "java.min.js", "c.min.js", "cpp.min.js", "csharp.min.js",
-                    "go.min.js", "ruby.min.js", "php.min.js", "swift.min.js",
-                    "rust.min.js", "kotlin.min.js", "lua.min.js", "markdown.min.js",
-                    "css.min.js", "xml.min.js", "bash.min.js", "ini.min.js",
-                    "yaml.min.js", "toml.min.js", "dockerfile.min.js"
-                }
-                files = []
-                try:
-                    files = sorted(os.listdir(langs_dir))
-                except Exception:
-                    files = []
-                # 加载优先语言
-                for fname in files:
-                    if fname in preferred and fname.endswith(".min.js"):
-                        fpath = os.path.join(langs_dir, fname)
-                        try:
-                            with open(fpath, "r", encoding="utf-8") as lf:
-                                builtin_lang_sources += "\n" + lf.read()
-                        except Exception:
-                            continue
-                # 加载剩余语言
-                for fname in files:
-                    if fname.endswith(".min.js") and fname not in preferred:
-                        fpath = os.path.join(langs_dir, fname)
-                        try:
-                            with open(fpath, "r", encoding="utf-8") as lf:
-                                builtin_lang_sources += "\n" + lf.read()
-                        except Exception:
-                            continue
-        except Exception as e:
-            logger.error(f"读取内置 highlight.js 语言模块失败: {e}")
-            builtin_lang_sources = ""
+        # 为 Ljos 语言追加自定义 highlight.js 语言定义
+        ljos_hljs_def = r"""
+; (function() {
+    function ljosLanguage(hljs) {
+        const KEYWORDS = {
+            keyword:
+                'mut const readonly public private protected static abstract final override ' +
+                'if else for while do when break continue return throw try catch finally ' +
+                'fn type where go defer move borrow using macro async await yield ' +
+                'class interface enum extends implements constructor new this super import export default',
+            literal:
+                'nul true false',
+            type:
+                'int float str bool bytes'
+        };
 
-        # 读取 languages 目录下的 JSON 并构造 highlight.js 语言注册脚本
-        def _build_hljs_defs_from_json():
-            defs = []
-            try:
-                languages_dir = os.path.join(plugin_dir, "languages")
-                if os.path.isdir(languages_dir):
-                    for fname in os.listdir(languages_dir):
-                        if not fname.lower().endswith(".json"):
-                            continue
-                        fpath = os.path.join(languages_dir, fname)
-                        try:
-                            with open(fpath, "r", encoding="utf-8") as jf:
-                                data = json.load(jf)
-                            if data.get("register") is False:
-                                continue
-                            name = str(data.get("name") or "").strip() or "CustomLang"
-                            aliases = data.get("aliases") or []
-                            keywords_list = data.get("keywords") or []
-                            types_list = data.get("types") or []
-                            literals_list = data.get("literals") or []
-                            kw_keyword = " ".join([str(x) for x in keywords_list if isinstance(x, str)])
-                            kw_type = " ".join([str(x) for x in types_list if isinstance(x, str)])
-                            kw_literal = " ".join([str(x) for x in literals_list if isinstance(x, str)])
-                            register_as = (str(aliases[0]).lower() if isinstance(aliases, list) and aliases else name.lower())
-                            func_name = "hljsLang_" + re.sub(r"[^A-Za-z0-9_]", "_", register_as)
-                            keyword_json = json.dumps(kw_keyword, ensure_ascii=False)
-                            type_json = json.dumps(kw_type, ensure_ascii=False)
-                            literal_json = json.dumps(kw_literal, ensure_ascii=False)
-                            name_json = json.dumps(name, ensure_ascii=False)
-                            aliases_json = json.dumps(aliases, ensure_ascii=False)
-                            lang_id_json = json.dumps(register_as, ensure_ascii=False)
-                            js = f"""
-; (function() {{
-    function {func_name}(hljs) {{
-        const KEYWORDS = {{
-            keyword: {keyword_json},
-            type: {type_json},
-            literal: {literal_json}
-        }};
-
-        return {{
-            name: {name_json},
-            aliases: {aliases_json},
+        return {
+            name: 'Ljos',
+            aliases: ['lj'],
             keywords: KEYWORDS,
             contains: [
                 hljs.C_LINE_COMMENT_MODE,
                 hljs.C_BLOCK_COMMENT_MODE,
-                {{
+                {
                     className: 'string',
                     variants: [
                         hljs.QUOTE_DOUBLE_MODE,
-                        hljs.APOS_STRING_MODE,
-                        {{
+                        {
                             begin: '`', end: '`'
-                        }}
+                        }
                     ]
-                }},
-                {{
+                },
+                {
                     className: 'number',
-                    variants: [ hljs.C_NUMBER_MODE ],
+                    variants: [
+                        { begin: /0[bB][01]([01_]*[01])?\b/ },
+                        { begin: /0[oO][0-7]([0-7_]*[0-7])?\b/ },
+                        { begin: /0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?\b/ },
+                        { begin: /[0-9]([0-9_]*[0-9])?\.[0-9]([0-9_]*[0-9])?([eE][+-]?[0-9]([0-9_]*[0-9])?)?\b/ },
+                        { begin: /[0-9]([0-9_]*[0-9])?\b/ }
+                    ],
                     relevance: 0
-                }},
-                {{
+                },
+                {
+                    className: 'meta',
+                    begin: '@[A-Za-z_][A-Za-z0-9_]*'
+                },
+                {
                     className: 'function',
-                    match: /[A-Za-z_][A-Za-z0-9_]*\s*(?=\()/,
-                    relevance: 0
-                }},
-                {{
+                    beginKeywords: 'fn',
+                    end: /\(/,
+                    excludeEnd: true,
+                    contains: [hljs.inherit(hljs.TITLE_MODE, { begin: /[A-Za-z_][A-Za-z0-9_]*/ })]
+                },
+                {
                     className: 'class',
-                    match: /class\s+[A-Za-z_][A-Za-z0-9_]*/,
-                    relevance: 0
-                }}
+                    beginKeywords: 'class interface enum',
+                    end: /\{/,
+                    excludeEnd: true,
+                    contains: [hljs.inherit(hljs.TITLE_MODE, { begin: /[A-Z][A-Za-z0-9_]*/ })]
+                }
             ]
-        }};
-    }}
+        };
+    }
 
-    var langId = {lang_id_json};
-    if (typeof window !== 'undefined' && window.hljs) {{
-        if (!window.hljs.getLanguage(langId)) {{ window.hljs.registerLanguage(langId, {func_name}); }}
-    }} else if (typeof hljs !== 'undefined') {{
-        hljs.registerLanguage(langId, {func_name});
-    }}
-}})();
+    if (typeof window !== 'undefined' && window.hljs && !window.hljs.getLanguage('ljos')) {
+        window.hljs.registerLanguage('ljos', ljosLanguage);
+    }
+})();
 """
-                            defs.append(js)
-                        except Exception as _e:
-                            logger.warning(f"注册自定义语言失败: {fname}: {_e}")
-            except Exception as e:
-                logger.error(f"读取自定义语言目录失败: {e}")
-            return "\n".join(defs)
-
-        custom_hljs_defs = _build_hljs_defs_from_json()
-
 
         # 避免内联脚本中出现 </script> 终止标签
-        full_hljs_source = (hljs_source or '') + (builtin_lang_sources or '') + (custom_hljs_defs or '')
+        full_hljs_source = (hljs_source or '') + ljos_hljs_def
         hljs_inline = full_hljs_source.replace("</script>", "<\\/script>") if full_hljs_source else ""
 
         # 将代码安全转义后塞进 template
         escaped_code = html.escape(code)
-        language_class = language or None
+        language_class = language or "plaintext"
 
         html_content = f"""<!DOCTYPE html>
 <html>
@@ -607,7 +539,7 @@ class CodeRenderPlugin(Star):
 </head>
 <body>
     <div class="code-container">
-        <pre><code class="hljs{(' language-' + language_class) if language_class else ''}">{escaped_code}</code></pre>
+        <pre><code class="hljs language-{language_class}">{escaped_code}</code></pre>
     </div>
 </body>
 </html>
@@ -801,12 +733,14 @@ class CodeRenderPlugin(Star):
             yield event.plain_result("❌ 未能从消息中提取到代码")
             return
         
-        # 确定语言（不做自动检测，交给 highlight.js）
+        # 确定语言
         if not final_language:
-            final_language = None
+            final_language = detected_lang
+        if not final_language:
+            final_language = self._detect_language(code)
         
-        # 显示名称
-        lang_display = final_language or "auto"
+        # 获取语言显示名称
+        lang_display = self.languages.get(final_language, {}).get("display_name", final_language)
         theme_display = final_theme or (self.config.get("theme", "monokai") if self.config else "monokai")
         
         try:
@@ -832,7 +766,7 @@ class CodeRenderPlugin(Star):
             
             yield result
             
-            logger.info(f"代码渲染成功: 语言={lang_display}, 主题={theme_display}, {len(code)} 字符")
+            logger.info(f"代码渲染成功: {lang_display}, 主题: {theme_display}, {len(code)} 字符")
             
         except Exception as e:
             logger.error(f"渲染代码时发生错误: {e}")
@@ -923,16 +857,12 @@ class CodeRenderPlugin(Star):
                 yield event.plain_result("❌ 文件内容为空")
                 return
 
-            # 确定语言（优先使用扩展名映射，其次自动）
+            # 确定语言 (优先使用强制指定的，否则根据文件名检测)
             if not final_language:
-                ext = os.path.splitext(file_name)[1].lower()
-                if hasattr(self, "_ext_lang_map") and ext in self._ext_lang_map:
-                    final_language = self._ext_lang_map[ext]
-                else:
-                    final_language = None
+                final_language = self._detect_language(code, filename=file_name)
             
-            # 显示名称
-            lang_display = final_language or "auto"
+            # 获取显示名称
+            lang_display = self.languages.get(final_language, {}).get("display_name", final_language)
             theme_display = final_theme or (self.config.get("theme", "monokai") if self.config else "monokai")
 
             # 渲染

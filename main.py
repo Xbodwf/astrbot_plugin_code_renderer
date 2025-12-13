@@ -286,15 +286,11 @@ class CodeRenderPlugin(Star):
 
     def _is_group_blocked(self, event: AstrMessageEvent) -> bool:
         """检查当前群是否在黑名单中"""
-        if not self.config:
-            return False
-        
         session_id = event.session_id
         if not session_id:
             return False
         
-        blacklist = self.config.get("blacklist", [])
-        return session_id in blacklist
+        return session_id in self.config.blacklist
 
     def _detect_language(self, code: str, hint: str = None, filename: str = None) -> str:
         """检测代码语言 - 现在完全依赖 highlight.js 自动检测，仅处理提示和文件扩展名"""
@@ -850,6 +846,61 @@ class CodeRenderPlugin(Star):
             logger.error(f"处理文件渲染时发生错误: {e}")
             yield event.plain_result(f"❌ 处理失败: {str(e)}")
 
+    @filter.llm_tool(name="render_code_image")
+    async def render_code_image(
+        self, 
+        event: AstrMessageEvent, 
+        code: str,
+        language: str = None,
+        theme: str = None,
+        font_size: int = None
+    ) -> MessageEventResult:
+        """
+        将代码渲染为图片并发送。
+        示例：
+            1. 渲染Python代码：
+               await render_code_image(code="print('hello')", language="python")
+            2. 使用自定义主题和字体大小：
+               await render_code_image(code="console.log('hi')", language="javascript", theme="dracula", font_size=16)
+        Args:
+            code (str): 要渲染的代码
+            language (str, optional): 代码语言. 默认为自动检测.
+            theme (str, optional): 主题名称. 默认为配置的默认主题.
+            font_size (int, optional): 字体大小. 默认为配置的默认大小.
+        """
+        if not code or not code.strip():
+            logger.warning("代码不能为空")
+            yield event.plain_result("❌ 代码不能为空")
+            return
+            
+        logger.info(f"正在渲染代码: language={language}, theme={theme}, font_size={font_size}")
+        
+        try:
+            # 渲染代码为图片
+            image_path = await self._render_code_to_image(
+                code=code,
+                language=language,
+                theme_override=theme,
+                font_size_override=font_size,
+                line_numbers_override=True
+            )
+            
+            if not os.path.exists(image_path):
+                logger.error("渲染失败：图片生成失败")
+                yield event.plain_result("❌ 代码渲染失败：无法生成图片")
+                return
+            
+            # 发送图片
+            result = MessageEventResult()
+            result.chain.append(ImageComponent(file=image_path))
+            
+            logger.info(f"代码渲染成功: {len(code)} 字符")
+            yield result
+            
+        except Exception as e:
+            logger.error(f"渲染代码时发生错误: {e}")
+            yield event.plain_result(f"❌ 渲染失败: {str(e)}")
+    
     async def terminate(self):
         """插件销毁时清理"""
         # 先清理临时文件

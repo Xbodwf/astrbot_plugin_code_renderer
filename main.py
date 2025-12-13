@@ -266,7 +266,7 @@ class CodeRenderPlugin(Star):
                 try:
                     browser = await p.chromium.launch(headless=True)
                     await browser.close()
-                    logger.info("Playwright Chromium 浏览器已就绪")
+                    #logger.info("Playwright Chromium 浏览器已就绪")
                 except Exception as e:
                     logger.warning("Playwright 浏览器未安装或不可用，尝试自动安装 Chromium ...")
                     import subprocess as _sub
@@ -852,21 +852,19 @@ class CodeRenderPlugin(Star):
         event: AstrMessageEvent, 
         code: str,
         language: str = None,
-        theme: str = None,
-        font_size: int = None
+        theme: str = "github",
+        font_size: int = 16
     ) -> MessageEventResult:
         """
         将代码渲染为图片并发送。
         示例：
-            1. 渲染Python代码：
-               await render_code_image(code="print('hello')", language="python")
-            2. 使用自定义主题和字体大小：
                await render_code_image(code="console.log('hi')", language="javascript", theme="dracula", font_size=16)
+               
         Args:
             code (str): 要渲染的代码
-            language (str, optional): 代码语言. 默认为自动检测.
-            theme (str, optional): 主题名称. 默认为配置的默认主题.
-            font_size (int, optional): 字体大小. 默认为配置的默认大小.
+            language (str): 代码语言. 建议填写。
+            theme (str): 主题名称. 建议为idea-light
+            font_size (int): 字体大小. 建议使用16
         """
         if not code or not code.strip():
             logger.warning("代码不能为空")

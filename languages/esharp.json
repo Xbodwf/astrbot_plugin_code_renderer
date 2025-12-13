@@ -1,0 +1,32 @@
+{
+  "name": "ESharp",
+  "aliases": ["esharp"],
+  "keywords": [
+    "function", "class", "struct", "interface", "enum", "namespace",
+    "public", "private", "protected", "internal", "static",
+    "if", "else", "for", "while", "do", "switch", "case", "default",
+    "break", "continue", "return", "throw", "try", "catch", "finally",
+    "using", "import", "as", "is", "in", "new", "this", "base",
+    "var", "let", "const", "readonly",
+    "template", "auto", "asm", "volatile", "unique_ptr", "shared_ptr",
+    "make_unique", "make_shared", "nullptr", "lock", "atomic",
+    "async", "await", "extends", "implements", "typeof", "instanceof",
+    "super", "export", "yield", "typename", "delete",
+    "section", "global", "equ",
+    "sizeof", "nameof", "checked", "unchecked", "delegate", "event",
+    "out", "ref", "params"
+  ],
+  "types": [
+    "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
+    "float32", "float64", "bool", "string", "char", "void", "any", "object",
+    "int", "float", "double", "short", "long", "ushort", "ulong", "size_t",
+    "array", "list", "map", "set", "ptr",
+    "int32*", "uint32*", "float32*", "float64*", "bool*", "string*", "void*",
+    "int32**", "uint32**", "float32**", "float64**", "bool**", "string**", "void**",
+    "Console", "File", "Directory", "Path", "Environment", "Process", "Thread",
+    "Mutex", "List", "Dictionary", "Array", "Vector", "Queue", "Stack",
+    "HashMap", "StringBuilder", "Math", "Random", "DateTime", "Exception",
+    "MemoryStream", "BufferedStream", "safe_array"
+  ],
+  "literals": ["true", "false", "null"]
+}

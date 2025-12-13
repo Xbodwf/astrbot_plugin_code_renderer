@@ -846,25 +846,18 @@ class CodeRenderPlugin(Star):
             logger.error(f"处理文件渲染时发生错误: {e}")
             yield event.plain_result(f"❌ 处理失败: {str(e)}")
 
-    @filter.llm_tool(name="render_code_image")
+    @filter.llm_tool(name="render_code_to_image")
     async def render_code_image(
-        self, 
-        event: AstrMessageEvent, 
-        code: str,
-        language: str = None,
-        theme: str = "github",
-        font_size: int = 16
+        self, event: AstrMessageEvent, code: str,language: str = "",theme: str = "github",font_size: int = 16
     ) -> MessageEventResult:
         """
         将代码渲染为图片并发送。
-        示例：
-               await render_code_image(code="console.log('hi')", language="javascript", theme="dracula", font_size=16)
-               
+
         Args:
-            code (str): 要渲染的代码
-            language (str): 代码语言. 建议填写。
-            theme (str): 主题名称. 建议为idea-light
-            font_size (int): 字体大小. 建议使用16
+            code(str): 要渲染的代码
+            language(str): 代码语言. 建议填写。
+            theme(str): 主题名称. 建议为idea-light
+            font_size(int): 字体大小. 建议使用16
         """
         if not code or not code.strip():
             logger.warning("代码不能为空")

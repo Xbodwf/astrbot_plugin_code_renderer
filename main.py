@@ -422,20 +422,26 @@ class CodeRenderPlugin(Star):
         margin: 0;
         padding: 20px;
         background: #1e1e1e;
+        min-height: 100vh;
+        display: flex;
+        align-items: flex-start;
     }}
     pre {{
         margin: 0;
         font-size: {font_size}px;
         line-height: 1.5;
         font-family: {font_family};
+        white-space: pre-wrap;
+        word-wrap: break-word;
     }}
     .code-container {{
-        display: inline-block;
+        display: block;
         padding: 16px 20px;
         border-radius: 12px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        min-width: 600px;
+        width: fit-content;
         max-width: 1100px;
-        overflow: auto;
     }}
     {hljs_theme_css}
     </style>
@@ -451,19 +457,15 @@ class CodeRenderPlugin(Star):
                         continue;
                     }}
                     
-                    // 检查是否有指定语言类
                     const classes = Array.from(block.classList);
                     const hasLanguage = classes.some(cls => cls.startsWith('language-') && cls !== 'language-');
                     
                     if (hasLanguage) {{
-                        // 有指定语言，使用 highlightElement
                         window.hljs.highlightElement(block);
                     }} else {{
-                        // 没有指定语言，使用 highlightAuto 自动检测
                         const result = window.hljs.highlightAuto(block.textContent);
                         block.innerHTML = result.value;
                         block.className = 'hljs ' + result.language;
-                        console.log('[v0] Auto-detected language:', result.language);
                     }}
                 }} catch (e) {{
                     console.error('highlight.js error', e);
@@ -517,7 +519,13 @@ class CodeRenderPlugin(Star):
 
         page = await self._browser.new_page(viewport={"width": 1200, "height": 800})
         await page.set_content(html_content, wait_until="networkidle")
-        await page.screenshot(path=file_path, full_page=True)
+        
+        element = await page.query_selector('.code-container')
+        if element:
+            await element.screenshot(path=file_path)
+        else:
+            await page.screenshot(path=file_path, full_page=True)
+        
         await page.close()
 
         return file_path

@@ -537,7 +537,7 @@ class CodeRenderPlugin(Star):
 
 
         # 避免内联脚本中出现 </script> 终止标签
-        full_hljs_source = (hljs_source or '') + (builtin_lang_sources or '') + (custom_hljs_defs or '') + ljos_hljs_def
+        full_hljs_source = (hljs_source or '') + (builtin_lang_sources or '') + (custom_hljs_defs or '')
         hljs_inline = full_hljs_source.replace("</script>", "<\\/script>") if full_hljs_source else ""
 
         # 将代码安全转义后塞进 template

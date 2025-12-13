@@ -401,6 +401,47 @@ class CodeRenderPlugin(Star):
             logger.error(f"读取 highlight.js 失败: {e}")
             hljs_source = ""
 
+        # 读取内置语言模块并注册到 highlight.js
+        builtin_lang_sources = ""
+        try:
+            langs_dir = os.path.join(plugin_dir, "assets", "highlight", "es", "languages")
+            if os.path.isdir(langs_dir):
+                # 优先加载常用语言，随后加载其他语言
+                preferred = {
+                    "javascript.min.js", "python.min.js", "json.min.js",
+                    "java.min.js", "c.min.js", "cpp.min.js", "csharp.min.js",
+                    "go.min.js", "ruby.min.js", "php.min.js", "swift.min.js",
+                    "rust.min.js", "kotlin.min.js", "lua.min.js", "markdown.min.js",
+                    "css.min.js", "xml.min.js", "bash.min.js", "ini.min.js",
+                    "yaml.min.js", "toml.min.js", "dockerfile.min.js"
+                }
+                files = []
+                try:
+                    files = sorted(os.listdir(langs_dir))
+                except Exception:
+                    files = []
+                # 加载优先语言
+                for fname in files:
+                    if fname in preferred and fname.endswith(".min.js"):
+                        fpath = os.path.join(langs_dir, fname)
+                        try:
+                            with open(fpath, "r", encoding="utf-8") as lf:
+                                builtin_lang_sources += "\n" + lf.read()
+                        except Exception:
+                            continue
+                # 加载剩余语言
+                for fname in files:
+                    if fname.endswith(".min.js") and fname not in preferred:
+                        fpath = os.path.join(langs_dir, fname)
+                        try:
+                            with open(fpath, "r", encoding="utf-8") as lf:
+                                builtin_lang_sources += "\n" + lf.read()
+                        except Exception:
+                            continue
+        except Exception as e:
+            logger.error(f"读取内置 highlight.js 语言模块失败: {e}")
+            builtin_lang_sources = ""
+
         # 读取 languages 目录下的 JSON 并构造 highlight.js 语言注册脚本
         def _build_hljs_defs_from_json():
             defs = []
@@ -494,79 +535,9 @@ class CodeRenderPlugin(Star):
 
         custom_hljs_defs = _build_hljs_defs_from_json()
 
-        # 为 Ljos 语言追加自定义 highlight.js 语言定义（示例）
-        ljos_hljs_def = r"""
-; (function() {
-    function ljosLanguage(hljs) {
-        const KEYWORDS = {
-            keyword:
-                'mut const readonly public private protected static abstract final override ' +
-                'if else for while do when break continue return throw try catch finally ' +
-                'fn type where go defer move borrow using macro async await yield ' +
-                'class interface enum extends implements constructor new this super import export default',
-            literal:
-                'nul true false',
-            type:
-                'int float str bool bytes'
-        };
-
-        return {
-            name: 'Ljos',
-            aliases: ['lj'],
-            keywords: KEYWORDS,
-            contains: [
-                hljs.C_LINE_COMMENT_MODE,
-                hljs.C_BLOCK_COMMENT_MODE,
-                {
-                    className: 'string',
-                    variants: [
-                        hljs.QUOTE_DOUBLE_MODE,
-                        {
-                            begin: '`', end: '`'
-                        }
-                    ]
-                },
-                {
-                    className: 'number',
-                    variants: [
-                        { begin: /0[bB][01]([01_]*[01])?\b/ },
-                        { begin: /0[oO][0-7]([0-7_]*[0-7])?\b/ },
-                        { begin: /0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?\b/ },
-                        { begin: /[0-9]([0-9_]*[0-9])?\.[0-9]([0-9_]*[0-9])?([eE][+-]?[0-9]([0-9_]*[0-9])?)?\b/ },
-                        { begin: /[0-9]([0-9_]*[0-9])?\b/ }
-                    ],
-                    relevance: 0
-                },
-                {
-                    className: 'meta',
-                    begin: '@[A-Za-z_][A-Za-z0-9_]*'
-                },
-                {
-                    className: 'function',
-                    beginKeywords: 'fn',
-                    end: /\(/,
-                    excludeEnd: true,
-                    contains: [hljs.inherit(hljs.TITLE_MODE, { begin: /[A-Za-z_][A-Za-z0-9_]*/ })]
-                },
-                {
-                    className: 'class',
-                    beginKeywords: 'class interface enum',
-                    end: /\{/,
-                    excludeEnd: true,
-                    contains: [hljs.inherit(hljs.TITLE_MODE, { begin: /[A-Z][A-Za-z0-9_]*/ })]
-                }
-            ]
-        };
-    }
-
-    if (typeof window !== 'undefined' && window.hljs && !window.hljs.getLanguage('ljos')) {
-        window.hljs.registerLanguage('ljos', ljosLanguage);
-    }
-})();
-"""
 
         # 避免内联脚本中出现 </script> 终止标签
-        full_hljs_source = (hljs_source or '') + (custom_hljs_defs or '') + ljos_hljs_def
+        full_hljs_source = (hljs_source or '') + (builtin_lang_sources or '') + (custom_hljs_defs or '') + ljos_hljs_def
         hljs_inline = full_hljs_source.replace("</script>", "<\\/script>") if full_hljs_source else ""
 
         # 将代码安全转义后塞进 template

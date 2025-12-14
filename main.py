@@ -423,12 +423,17 @@ class CodeRenderPlugin(Star):
         use_line_numbers = (
             line_numbers_override
             if line_numbers_override is not None
-            else (self.config.get("line_numbers", False) if self.config else False)
+            else (self.config.get("line_numbers_enabled", True) if self.config else True)
         )
         start_from = (
             self.config.get("line_numbers_start_from", 1)
             if (self.config and isinstance(self.config.get("line_numbers_start_from", 1), int))
             else 1
+        )
+        single_line = (
+            self.config.get("line_numbers_single_line", False)
+            if self.config
+            else False
         )
 
         html_content = f"""<!DOCTYPE html>
@@ -468,7 +473,7 @@ class CodeRenderPlugin(Star):
     <script>
     (function () {{
         var ENABLE_LINE_NUMBERS = {str(bool(use_line_numbers)).lower()};
-        var LN_OPTIONS = {{ startFrom: {start_from} }};
+        var LN_OPTIONS = {{ startFrom: {start_from}, singleLine: {str(bool(single_line)).lower()} }};
         function applyHighlight() {{
             const blocks = document.querySelectorAll('pre code');
             for (const block of blocks) {{

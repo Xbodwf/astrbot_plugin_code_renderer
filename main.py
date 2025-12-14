@@ -27,7 +27,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.6")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.7")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -129,7 +129,7 @@ class CodeRenderPlugin(Star):
         # Start periodic cleanup task
         asyncio.create_task(self._periodic_cleanup())
         
-        logger.info(f"代码预览器插件已初始化，加载了 {len(self.custom_languages)} 个自定义语言")
+        logger.info(f"{len(self.custom_languages)} 个自定义语言已加载.")
 
     def _find_cjk_font(self, font_size: int):
         """Find available CJK font across platforms"""
@@ -398,15 +398,38 @@ class CodeRenderPlugin(Star):
             logger.error(f"读取 highlight.js 失败: {e}")
             hljs_source = ""
 
+        # 读取行号插件源码
+        lnjs_source = ""
+        try:
+            lnjs_path = os.path.join(plugin_dir, "assets", "line-number", "line-number.js")
+            if os.path.exists(lnjs_path):
+                with open(lnjs_path, "r", encoding="utf-8") as f:
+                    lnjs_source = f.read()
+        except Exception as e:
+            logger.error(f"读取行号插件失败: {e}")
+            lnjs_source = ""
+
         custom_lang_scripts = self._generate_hljs_language_registrations()
 
         # 避免内联脚本中出现 </script> 终止标签
-        full_hljs_source = (hljs_source or '') + custom_lang_scripts
+        full_hljs_source = (hljs_source or '') + (lnjs_source or '') + custom_lang_scripts
         hljs_inline = full_hljs_source.replace("</script>", "<\\/script>") if full_hljs_source else ""
 
         # 将代码安全转义后塞进 template
         escaped_code = html.escape(code)
         language_class = language if language else ""
+
+        # 行号配置
+        use_line_numbers = (
+            line_numbers_override
+            if line_numbers_override is not None
+            else (self.config.get("line_numbers", False) if self.config else False)
+        )
+        start_from = (
+            self.config.get("line_numbers_start_from", 1)
+            if (self.config and isinstance(self.config.get("line_numbers_start_from", 1), int))
+            else 1
+        )
 
         html_content = f"""<!DOCTYPE html>
 <html>
@@ -444,6 +467,8 @@ class CodeRenderPlugin(Star):
     <script>{hljs_inline}</script>
     <script>
     (function () {{
+        var ENABLE_LINE_NUMBERS = {str(bool(use_line_numbers)).lower()};
+        var LN_OPTIONS = {{ startFrom: {start_from} }};
         function applyHighlight() {{
             const blocks = document.querySelectorAll('pre code');
             for (const block of blocks) {{
@@ -462,6 +487,9 @@ class CodeRenderPlugin(Star):
                         const result = window.hljs.highlightAuto(block.textContent);
                         block.innerHTML = result.value;
                         block.className = 'hljs ' + result.language;
+                    }}
+                    if (ENABLE_LINE_NUMBERS && window.hljs && typeof window.hljs.lineNumbersBlock === 'function') {{
+                        window.hljs.lineNumbersBlock(block, LN_OPTIONS);
                     }}
                 }} catch (e) {{
                     console.error('highlight.js error', e);

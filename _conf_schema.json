@@ -29,6 +29,24 @@
     "hint": "可选，自定义主题 CSS 路径；为空则根据主题名称从 assets/highlight/styles/<主题>.min.css 自动加载",
     "default": ""
   },
+  "line_numbers_enabled": {
+    "type": "boolean",
+    "description": "是否启用代码行号",
+    "hint": "插件级别的行号显示总开关（可被渲染指令/命令行覆盖）",
+    "default": true
+  },
+  "line_numbers_start_from": {
+    "type": "integer",
+    "description": "行号起始值",
+    "hint": "设置行号开始计数的数值（支持局部 data-ln-start-from 覆盖）",
+    "default": 1
+  },
+  "line_numbers_single_line": {
+    "type": "boolean",
+    "description": "单行代码也显示行号",
+    "hint": "为只有一行的代码块也渲染行号",
+    "default": false
+  },
   "blacklist": {
     "type": "list",
     "description": "群聊黑名单",

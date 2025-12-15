@@ -9,20 +9,8 @@
 - 支持自定义字体、字体大小等
 - 自动检测代码语言
 
-使用`Highlight.js`.
-
-
-<details>
-<summary>点击展开</summary>
-
-```plaintext
-1.3.2 删除了被Astrbot AI代码检查器诟病的自定义语言解析器
-1.4.0 重写了自定义语言(存在问题)
-1.4.0-hotfix1 修复了无法检测代码文件的语言问题
-1.4.5 修复了代码无法填充整张图片的问题
-1.4.7 实现了行号显示
-```
-</details>
+使用`Highlight.js` + `highlight-js-line-number`
+(Playwright)
 
 - **支持参数指定渲染选项**
 
@@ -110,31 +98,31 @@ def hello():
 定义语言的关键字。可以是简单的数组，或按类别分组的对象。
 
 **简单数组形式：**
-\`\`\`json
+```json
 "keywords": ["if", "else", "for", "while", "return"]
-\`\`\`
+```
 
 **分类对象形式：**
-\`\`\`json
+```json
 "keywords": {
   "keyword": ["if", "else", "for", "while"],
   "type": ["int", "float", "string", "bool"],
   "literal": ["true", "false", "null"],
   "built_in": ["print", "console", "Math"]
 }
-\`\`\`
+```
 
 #### strings (object)
 
 配置字符串匹配规则：
 
-\`\`\`json
+```json
 "strings": {
   "double_quote": true,    // 支持双引号字符串 "..."
   "single_quote": true,    // 支持单引号字符串 '...'
   "backtick": false        // 支持反引号字符串 `...`
 }
-\`\`\`
+```
 
 默认值：双引号和单引号均为 true，反引号为 false。
 
@@ -142,7 +130,7 @@ def hello():
 
 配置数字匹配规则：
 
-\`\`\`json
+```json
 "numbers": {
   "use_default": true,     // 使用 highlight.js 默认数字模式
   "binary": true,          // 支持二进制 0b1010
@@ -150,7 +138,7 @@ def hello():
   "hex": true,             // 支持十六进制 0xFF
   "decimal": true          // 支持十进制和浮点数
 }
-\`\`\`
+```
 
 如果 `use_default` 为 true，将使用 highlight.js 的 C_NUMBER_MODE。
 
@@ -158,7 +146,7 @@ def hello():
 
 定义额外的语法模式：
 
-\`\`\`json
+```json
 "patterns": [
   {
     "className": "meta",
@@ -170,7 +158,7 @@ def hello():
     "keywords": "fn"
   }
 ]
-\`\`\`
+```
 
 每个模式支持的字段：
 - **className**: highlight.js 的类名（如 "function", "class", "meta", "comment" 等）
@@ -184,7 +172,7 @@ def hello():
 
 ### 最小示例
 
-\`\`\`json
+```json
 {
   "name": "MyLang",
   "aliases": ["ml", "mylang"],
@@ -195,7 +183,7 @@ def hello():
     "single_quote": false
   }
 }
-\`\`\`
+```
 
 ## 使用方法
 
@@ -211,4 +199,72 @@ def hello():
 - 插件会自动将语言定义注册到 highlight.js
 - 语言检测主要依赖 highlight.js 的自动检测功能
 - 提供的扩展名会用于文件名匹配
+ 
+## 使用指南
+ 
+### 命令
+ 
+- `/render [参数] [代码]`：引用一段代码或直接附带代码进行渲染
+- `/render_file [参数]`：引用一个代码文件进行渲染
+ 
+参数：
+ 
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `-l <语言>` 或 `lang=<语言>` | 指定语言（可选） | `-l python` |
+| `-t <主题>` 或 `theme=<主题>` | 指定主题 | `-t dracula` |
+| `-s <字号>` 或 `size=<字号>` | 指定字体大小 | `-s 16` |
+| `-ln` 或 `line` | 显式开启行号 | `-ln` |
+| `-n` 或 `noline` | 显式关闭行号 | `-n` |
+ 
+优先级：命令参数覆盖插件配置；未提供参数时遵循配置默认值。
+ 
+### LLM 工具
+ 
+- `render_code_to_image(code, language="", theme="github")`  
+  渲染任意代码为图片并返回消息结果。默认开启行号。
+ 
+- `render_file_to_image(theme="github", language="")`  
+  引用文件消息后调用，渲染该文件内容为图片；语言可选，不填将自动检测。
+ 
+### 配置（_conf_schema.json）
+ 
+| 键名 | 类型 | 说明 | 默认值 |
+|-----|------|------|--------|
+| `default_theme` | `string` | 默认主题名称 | `github-dark` |
+| `font_family` | `string` | 字体族名称 | `JetBrains Mono, ...` |
+| `font_path` | `string` | 本地字体文件路径 | `""` |
+| `highlight_js_path` | `string` | 自定义 `highlight.min.js` 路径 | `""` |
+| `highlight_css_path` | `string` | 自定义主题 CSS 路径 | `""` |
+| `line_numbers_enabled` | `bool` | 是否启用行号（总开关） | `true` |
+| `line_numbers_start_from` | `int` | 行号起始值 | `1` |
+| `line_numbers_single_line` | `bool` | 单行代码也显示行号 | `false` |
+| `line_numbers_width` | `int` | 行号列宽（px），`0`自动 | `0` |
+| `blacklist` | `list` | 群聊黑名单 | `[]` |
+ 
+行号列宽自适应规则：当 `line_numbers_width=0` 或未设置时，按最大行号位数自动计算列宽，公式为 `max(30, digits*8 + 12)`。
+ 
+主题位置：`assets/highlight/styles/<主题>.min.css`。如未设置 `highlight_css_path`，将根据 `default_theme` 自动加载对应 CSS。
+ 
+## 版本历史
+ 
+- 1.5.0  
+  - 新增 `render_file_to_image` LLM 工具  
+  - 行号列宽可配置并支持自适应  
+  - 修复默认开启行号时未加 `-ln` 不显示的问题
+ 
+- 1.4.7  
+  - 实现行号显示
+ 
+- 1.4.5  
+  - 修复代码无法填充整张图片的问题
+ 
+- 1.4.0-hotfix1  
+  - 修复无法检测代码文件语言的问题
+ 
+- 1.4.0  
+  - 重写自定义语言支持（存在问题）
+ 
+- 1.3.2  
+  - 删除旧版自定义语言解析器（与 AI 代码检查器建议一致）
 

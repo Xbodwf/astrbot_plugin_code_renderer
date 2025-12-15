@@ -27,7 +27,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from playwright.async_api import async_playwright
 
 
-@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.4.7")
+@register("astrbot_plugin_code_renderer", "Xbodw", "将代码信息或者代码文件渲染为图片", "1.5.0")
 class CodeRenderPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -932,6 +932,13 @@ class CodeRenderPlugin(Star):
     async def render_file_image(
         self, event: AstrMessageEvent, theme: str = "github", language: str = ""
     ) -> MessageEventResult:
+        """
+        引用文件并将其代码渲染为图片。
+        
+        Args:
+            theme(str): 主题名称。默认 github
+            language(str): 代码语言。可选；不填将根据文件名与内容自动识别
+        """
         result = MessageEventResult()
         messages = event.get_messages()
         target_file = None

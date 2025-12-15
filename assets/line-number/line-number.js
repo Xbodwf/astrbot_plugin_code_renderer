@@ -80,11 +80,17 @@ function addLineNumbersBlockFor(inputHtml, options) {
 
     if (lines.length > 1 || options.singleLine) {
         let html = '';
+        let width = options.lineNumberWidth;
+        if (!isFinite(width) || width <= 0) {
+            let max = (lines.length > 0 ? (lines.length + options.startFrom - 1) : options.startFrom);
+            let digits = String(max).length;
+            width = Math.max(30, digits * 8 + 12);
+        }
 
         for (let i = 0, l = lines.length; i < l; i++) {
             html += format(
                 '<tr>' +
-                '<td class="{0} {1}" {3}="{5}">' +
+                '<td class="{0} {1}" style="width:{7}px" {3}="{5}">' +
                 '<div class="{2}" {3}="{5}"></div>' +
                 '</td>' +
                 '<td class="{0} {4}" {3}="{5}">' +
@@ -98,7 +104,8 @@ function addLineNumbersBlockFor(inputHtml, options) {
                     DATA_ATTR_NAME,
                     CODE_BLOCK_NAME,
                     i + options.startFrom,
-                    lines[i].length > 0 ? lines[i] : ' '
+                    lines[i].length > 0 ? lines[i] : ' ',
+                    width
                 ]);
         }
 
@@ -117,7 +124,8 @@ function mapOptions(element, options) {
     options = options || {};
     return {
         singleLine: getSingleLineOption(options),
-        startFrom: getStartFromOption(element, options)
+        startFrom: getStartFromOption(element, options),
+        lineNumberWidth: getLineNumberWidthOption(options)
     };
 }
 
@@ -144,6 +152,13 @@ function getStartFromOption(element, options) {
     }
 
     return startFrom;
+}
+
+function getLineNumberWidthOption(options) {
+    if (isFinite(options.lineNumberWidth)) {
+        return Number(options.lineNumberWidth);
+    }
+    return null;
 }
 
 /**

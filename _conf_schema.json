@@ -47,6 +47,12 @@
     "hint": "为只有一行的代码块也渲染行号",
     "default": false
   },
+  "line_numbers_width": {
+    "type": "int",
+    "description": "行号列宽度(px)",
+    "hint": "设置行号区域宽度；0或未设置按行号位数动态调整",
+    "default": 0
+  },
   "blacklist": {
     "type": "list",
     "description": "群聊黑名单",

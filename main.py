@@ -435,6 +435,11 @@ class CodeRenderPlugin(Star):
             if self.config
             else False
         )
+        ln_width = None
+        if self.config:
+            w = self.config.get("line_numbers_width", None)
+            if isinstance(w, int) and w > 0:
+                ln_width = w
 
         html_content = f"""<!DOCTYPE html>
 <html>
@@ -473,7 +478,7 @@ class CodeRenderPlugin(Star):
     <script>
     (function () {{
         var ENABLE_LINE_NUMBERS = {str(bool(use_line_numbers)).lower()};
-        var LN_OPTIONS = {{ startFrom: {start_from}, singleLine: {str(bool(single_line)).lower()} }};
+        var LN_OPTIONS = {{ startFrom: {start_from}, singleLine: {str(bool(single_line)).lower()}, lineNumberWidth: {ln_width if ln_width is not None else 'null'} }};
         function applyHighlight() {{
             const blocks = document.querySelectorAll('pre code');
             for (const block of blocks) {{
@@ -921,6 +926,59 @@ class CodeRenderPlugin(Star):
             
         except Exception as e:
             logger.error(f"渲染代码时发生错误: {e}")
+            yield event.plain_result(f"❌ 渲染失败: {str(e)}")
+    
+    @filter.llm_tool(name="render_file_to_image")
+    async def render_file_image(
+        self, event: AstrMessageEvent, theme: str = "github", language: str = ""
+    ) -> MessageEventResult:
+        result = MessageEventResult()
+        messages = event.get_messages()
+        target_file = None
+        file_name = ""
+        if messages and isinstance(messages[0], Reply):
+            reply_seg = messages[0]
+            if hasattr(reply_seg, 'chain') and reply_seg.chain:
+                for seg in reply_seg.chain:
+                    if isinstance(seg, File):
+                        target_file = seg
+                        file_name = seg.name or "unknown"
+                        break
+        if not target_file:
+            yield event.plain_result("❌ 请引用一条包含文件的消息")
+            return
+        try:
+            file_path = await target_file.get_file()
+            if not file_path or not os.path.exists(file_path):
+                yield event.plain_result("❌ 文件获取失败")
+                return
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    code = f.read()
+            except UnicodeDecodeError:
+                try:
+                    with open(file_path, "r", encoding="gbk") as f:
+                        code = f.read()
+                except Exception:
+                    yield event.plain_result("❌ 文件编码不支持 (仅支持 UTF-8 和 GBK)")
+                    return
+            if not code or len(code.strip()) == 0:
+                yield event.plain_result("❌ 文件内容为空")
+                return
+            final_language = language or self._detect_language(code, filename=file_name)
+            image_path = await self._render_code_to_image(
+                code=code,
+                language=final_language,
+                theme_override=theme,
+                line_numbers_override=True
+            )
+            if not os.path.exists(image_path):
+                yield event.plain_result("❌ 渲染失败：图片生成失败")
+                return
+            result.chain.append(ImageComponent(file=image_path))
+            yield result
+        except Exception as e:
+            logger.error(f"渲染文件时发生错误: {e}")
             yield event.plain_result(f"❌ 渲染失败: {str(e)}")
     
     async def terminate(self):
